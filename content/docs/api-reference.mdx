@@ -1,0 +1,160 @@
+---
+title: API Reference
+description: Client methods, collection methods, types, and error codes.
+---
+
+## `createClient(options)`
+
+Creates a client. Call it once per process and share the instance — each client
+maintains its own cache and sync connection.
+
+```ts
+import { createClient } from '@nimbus/client';
+
+const nimbus = createClient({ projectKey: 'pk_...', region: 'eu-central' });
+```
+
+Returns a `NimbusClient`. See [Configuration](/docs/configuration) for the full
+options table.
+
+## `NimbusClient`
+
+<TypeTable
+  type={{
+    collection: {
+      description: 'Returns a typed handle to a collection.',
+      type: '(name: string) => Collection<T>',
+      parameters: [{ name: 'name', description: 'Collection identifier.' }],
+      returns: 'Collection<T>',
+    },
+    sync: {
+      description: 'Forces an immediate sync and resolves when the queue drains.',
+      type: '() => Promise<SyncResult>',
+      returns: 'SyncResult',
+    },
+    queue: {
+      description: 'Inspect or clear the pending write queue.',
+      type: 'QueueHandle',
+    },
+    tokens: {
+      description: 'Session token issuance. Server clients only.',
+      type: 'TokenHandle',
+    },
+    close: {
+      description: 'Closes the connection and releases persistence handles.',
+      type: '() => Promise<void>',
+    },
+  }}
+/>
+
+## `Collection<T>`
+
+<TypeTable
+  type={{
+    get: {
+      description: 'Reads a single record by id. Resolves to null when missing.',
+      type: '(id: string) => Promise<T | null>',
+      parameters: [{ name: 'id', description: 'Record identifier.' }],
+    },
+    put: {
+      description: 'Creates or replaces a record. Applies locally, then syncs.',
+      type: '(record: T) => Promise<T>',
+      required: true,
+    },
+    update: {
+      description: 'Merges a partial patch into an existing record.',
+      type: '(id: string, patch: Partial<T>) => Promise<T>',
+    },
+    delete: {
+      description: 'Removes a record. Tombstoned until the deletion replicates.',
+      type: '(id: string) => Promise<void>',
+    },
+    where: {
+      description: 'Adds a filter clause and returns a chainable query.',
+      type: '(field: string, op: Operator, value: unknown) => Query<T>',
+    },
+    subscribe: {
+      description: 'Listens for local and remote changes. Returns an unsubscribe fn.',
+      type: '(fn: (event: ChangeEvent<T>) => void) => () => void',
+      returns: '() => void',
+    },
+  }}
+/>
+
+## `ChangeEvent<T>`
+
+```ts
+type ChangeEvent<T> =
+  | { type: 'changed'; origin: 'local' | 'remote'; record: T }
+  | { type: 'deleted'; origin: 'local' | 'remote'; id: string }
+  | { type: 'conflict'; local: T; remote: T; resolved: T };
+```
+
+## HTTP endpoints
+
+The SDK wraps these, but they are stable if you need them directly.
+
+<Tabs items={['List', 'Get', 'Upsert', 'Delete']}>
+  <Tab value="List">
+    ```http
+    GET /v2/collections/{collection}/records?limit=50&after={cursor}
+    Authorization: Bearer pk_live_...
+    ```
+
+    ```json title="200 OK"
+    {
+      "items": [{ "id": "note_1", "title": "Hello Nimbus" }],
+      "nextCursor": "eyJpZCI6Im5vdGVfMSJ9"
+    }
+    ```
+  </Tab>
+  <Tab value="Get">
+    ```http
+    GET /v2/collections/{collection}/records/{id}
+    Authorization: Bearer pk_live_...
+    ```
+  </Tab>
+  <Tab value="Upsert">
+    ```http
+    PUT /v2/collections/{collection}/records/{id}
+    Authorization: Bearer sk_live_...
+    Content-Type: application/json
+
+    { "title": "Hello Nimbus", "archived": false }
+    ```
+  </Tab>
+  <Tab value="Delete">
+    ```http
+    DELETE /v2/collections/{collection}/records/{id}
+    Authorization: Bearer sk_live_...
+    ```
+
+    Returns `204 No Content`. Deleting a missing record is not an error.
+  </Tab>
+</Tabs>
+
+## Error codes
+
+| Code | HTTP | Retryable | Meaning |
+| --- | --- | --- | --- |
+| `NIMBUS_UNAUTHORIZED` | 401 | No | Key missing, malformed, or revoked |
+| `NIMBUS_FORBIDDEN` | 403 | No | Key lacks the required scope |
+| `NIMBUS_NOT_FOUND` | 404 | No | Collection does not exist |
+| `NIMBUS_CONFLICT` | 409 | No | Resolver rejected the write |
+| `NIMBUS_RATE_LIMITED` | 429 | Yes | Honour the `Retry-After` header |
+| `NIMBUS_QUEUE_OVERFLOW` | — | No | Local queue exceeded its cap |
+| `NIMBUS_UNAVAILABLE` | 503 | Yes | Region degraded; the SDK retries |
+
+```ts title="Handling errors"
+import { NimbusError } from '@nimbus/client';
+
+try {
+  await notes.put(record);
+} catch (error) {
+  if (error instanceof NimbusError && error.retryable) {
+    // The SDK already retried; surface a transient banner.
+    return showBanner('Reconnecting…');
+  }
+  throw error;
+}
+```

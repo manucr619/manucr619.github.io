@@ -1,0 +1,137 @@
+---
+title: Data Fetching
+description: Queries, subscriptions, pagination, and the offline queue.
+---
+
+Reads always come from the local cache first. Nimbus then revalidates in the
+background and pushes an update if the server disagrees — so the first paint is
+instant and the second is correct.
+
+## Queries
+
+```ts title="Basic query"
+const notes = nimbus.collection('notes');
+
+const recent = await notes
+  .where('archived', '==', false)
+  .orderBy('updatedAt', 'desc')
+  .limit(20)
+  .get();
+```
+
+Supported operators:
+
+| Operator | Meaning | Example |
+| --- | --- | --- |
+| `==` / `!=` | Equality | `.where('status', '==', 'open')` |
+| `<` `<=` `>` `>=` | Comparison | `.where('score', '>=', 10)` |
+| `in` / `not-in` | Set membership | `.where('tag', 'in', ['a', 'b'])` |
+| `contains` | Array membership | `.where('tags', 'contains', 'urgent')` |
+
+<Callout title="Indexes are implicit">
+  The first time a query shape runs, Nimbus builds a local index for it. That query
+  is slower once, then fast forever. There is nothing to declare.
+</Callout>
+
+## React hooks
+
+<Tabs items={['useCollection', 'useRecord']}>
+  <Tab value="useCollection">
+    ```tsx title="components/note-list.tsx"
+    'use client';
+
+    import { useCollection } from '@nimbus/react';
+
+    export function NoteList() {
+      const { data, isLoading, error } = useCollection('notes', (q) =>
+        q.where('archived', '==', false).orderBy('updatedAt', 'desc'),
+      );
+
+      if (isLoading) return <Skeleton />;
+      if (error) return <ErrorState error={error} />;
+
+      return (
+        <ul>
+          {data.map((note) => (
+            <li key={note.id}>{note.title}</li>
+          ))}
+        </ul>
+      );
+    }
+    ```
+  </Tab>
+  <Tab value="useRecord">
+    ```tsx title="components/note-detail.tsx"
+    'use client';
+
+    import { useRecord } from '@nimbus/react';
+
+    export function NoteDetail({ id }: { id: string }) {
+      const { data: note, update } = useRecord('notes', id);
+
+      if (!note) return null;
+
+      return (
+        <article>
+          <h1>{note.title}</h1>
+          <button onClick={() => update({ archived: true })}>Archive</button>
+        </article>
+      );
+    }
+    ```
+
+    `update` applies optimistically. If the sync later fails, the local record
+    rolls back and `onError` fires.
+  </Tab>
+</Tabs>
+
+## Pagination
+
+Cursor-based, because offset pagination drifts as records change underneath you.
+
+```ts title="Cursor pagination"
+let cursor: string | undefined;
+
+do {
+  const page = await notes.limit(50).after(cursor).get();
+
+  for (const note of page.items) {
+    process(note);
+  }
+
+  cursor = page.nextCursor;
+} while (cursor);
+```
+
+## Behaviour when offline
+
+<Mermaid chart={`
+stateDiagram-v2
+  [*] --> Synced
+  Synced --> Pending: local write
+  Pending --> Synced: replicated
+  Pending --> Queued: connection lost
+  Queued --> Pending: connection restored
+  Pending --> Conflict: server disagrees
+  Conflict --> Synced: strategy applied
+`} />
+
+Writes made offline are appended to a durable queue (IndexedDB, when persistence
+is enabled) and replayed in order on reconnect.
+
+<Accordions type="single">
+  <Accordion title="How large can the queue get?">
+    The default cap is 5,000 operations or 10 MB, whichever comes first. Past that,
+    the oldest entries are dropped and `onError` fires with
+    `NIMBUS_QUEUE_OVERFLOW`. Raise it with `queue: { maxOperations, maxBytes }`.
+  </Accordion>
+  <Accordion title="Does the queue survive a reload?">
+    Only with `persistence: 'indexeddb'`. Under `'memory'` — the default — a reload
+    discards anything not yet replicated.
+  </Accordion>
+  <Accordion title="Can I inspect it?">
+    Yes: `await nimbus.queue.list()` returns the pending operations, and
+    `nimbus.queue.clear()` drops them. Useful for a "discard unsaved changes"
+    affordance.
+  </Accordion>
+</Accordions>

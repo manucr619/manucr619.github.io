@@ -1,0 +1,16 @@
+{
+  "title": "Nimbus",
+  "root": true,
+  "pages": [
+    "---Getting Started---",
+    "index",
+    "quick-start",
+    "installation",
+    "configuration",
+    "guides",
+    "---Reference---",
+    "api-reference",
+    "faq",
+    "changelog"
+  ]
+}

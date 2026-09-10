@@ -1,0 +1,132 @@
+---
+title: Authentication
+description: Scoped keys, short-lived token exchange, and safe rotation.
+---
+
+Nimbus has two credential types. Getting the split right is the single most
+important security decision you will make with it.
+
+| Credential | Prefix | Lives | Can write |
+| --- | --- | --- | --- |
+| Publishable key | `pk_` | Browser, mobile app | No |
+| Secret key | `sk_` | Your server only | Yes |
+| Session token | `st_` | Browser, 15 min | Scoped per user |
+
+## The recommended pattern
+
+Ship a publishable key to the browser for reads. Route writes through your own
+endpoint, which holds the secret key and enforces your authorisation rules.
+
+<Mermaid chart={`
+sequenceDiagram
+  participant B as Browser
+  participant A as Your API
+  participant N as Nimbus Edge
+  B->>N: read (pk_ key)
+  N-->>B: records
+  B->>A: POST /notes
+  A->>A: authorise user
+  A->>N: write (sk_ key)
+  N-->>A: ok
+  N-->>B: invalidate
+`} />
+
+## Issuing session tokens
+
+For per-user scoping without proxying every write, exchange your secret key for a
+short-lived session token on the server and hand that to the client.
+
+<Tabs items={['Server', 'Client']}>
+  <Tab value="Server">
+    ```ts title="app/api/nimbus-token/route.ts"
+    import { createServerClient } from '@nimbus/server';
+    import { getCurrentUser } from '@/lib/auth';
+
+    const nimbus = createServerClient({
+      projectKey: process.env.NIMBUS_WRITE_KEY!,
+    });
+
+    export async function POST() {
+      const user = await getCurrentUser();
+      if (!user) return new Response('Unauthorized', { status: 401 });
+
+      const token = await nimbus.tokens.issue({
+        subject: user.id,
+        // The token can only touch this user's own records.
+        scope: [`notes:${user.id}:*`],
+        expiresIn: '15m',
+      });
+
+      return Response.json({ token });
+    }
+    ```
+  </Tab>
+  <Tab value="Client">
+    ```ts title="lib/nimbus.ts"
+    import { createClient } from '@nimbus/client';
+
+    export const nimbus = createClient({
+      region: 'us-east',
+      // Called on start and again whenever the token is close to expiring.
+      auth: async () => {
+        const res = await fetch('/api/nimbus-token', { method: 'POST' });
+        const { token } = await res.json();
+        return token;
+      },
+    });
+    ```
+  </Tab>
+</Tabs>
+
+<Callout title="Refresh happens automatically">
+  The client re-invokes `auth` about 60 seconds before expiry. If it throws, sync
+  pauses and queued writes are retained locally until the next successful refresh —
+  nothing is dropped.
+</Callout>
+
+## Rotating a leaked key
+
+<Steps>
+
+<Step>
+### Issue the replacement
+
+```bash
+npx @nimbus/cli keys create --name "prod-2" --scope read,write
+```
+</Step>
+
+<Step>
+### Deploy it
+
+Update the secret in your hosting provider and roll your services. Both keys are
+valid at this point, so there is no downtime.
+</Step>
+
+<Step>
+### Confirm the old key is idle
+
+```bash
+npx @nimbus/cli keys usage --name "prod-1" --since 1h
+```
+
+Wait until the request count reaches zero.
+</Step>
+
+<Step>
+### Revoke
+
+```bash
+npx @nimbus/cli keys revoke --name "prod-1"
+```
+
+Revocation is immediate and cannot be undone.
+</Step>
+
+</Steps>
+
+<Callout type="warn">
+  Revoking a secret key also invalidates every session token issued from it.
+  Clients will call `auth` again and recover on their own, but any write in flight
+  at that instant fails and is retried.
+</Callout>

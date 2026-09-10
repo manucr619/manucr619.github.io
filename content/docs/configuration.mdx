@@ -1,0 +1,129 @@
+---
+title: Configuration
+description: Every option accepted by createClient, with defaults and trade-offs.
+---
+
+All configuration happens in a single call. There is no config file and no
+environment-variable magic — what you pass is what you get.
+
+```ts title="lib/nimbus.ts"
+import { createClient } from '@nimbus/client';
+
+export const nimbus = createClient({
+  projectKey: process.env.NIMBUS_KEY!,
+  region: 'us-east',
+  persistence: 'indexeddb',
+  conflict: 'last-write-wins',
+  retry: {
+    attempts: 5,
+    backoff: 'exponential',
+  },
+});
+```
+
+## Client options
+
+<TypeTable
+  type={{
+    projectKey: {
+      description: 'Scoped key that identifies the project and its permissions.',
+      type: 'string',
+      required: true,
+    },
+    region: {
+      description: 'Edge region to connect to. Pick the one nearest your users.',
+      type: "'us-east' | 'us-west' | 'eu-central' | 'ap-south'",
+      default: "'us-east'",
+    },
+    persistence: {
+      description:
+        "Where the local cache lives. 'memory' is wiped on reload; 'indexeddb' survives it.",
+      type: "'memory' | 'indexeddb'",
+      default: "'memory'",
+    },
+    conflict: {
+      description:
+        'Strategy applied when a local and remote write touch the same record.',
+      type: "'last-write-wins' | 'server-wins' | ConflictResolver",
+      default: "'last-write-wins'",
+    },
+    retry: {
+      description: 'Retry policy for failed sync attempts.',
+      type: 'RetryOptions',
+      default: '{ attempts: 3, backoff: "exponential" }',
+    },
+    onError: {
+      description: 'Called for every unrecoverable sync error.',
+      type: '(error: NimbusError) => void',
+      parameters: [
+        { name: 'error', description: 'The error, including its retryable flag.' },
+      ],
+    },
+  }}
+/>
+
+## Retry options
+
+<TypeTable
+  type={{
+    attempts: {
+      description: 'How many times to retry before surfacing the error.',
+      type: 'number',
+      default: '3',
+    },
+    backoff: {
+      description: "'exponential' doubles the delay each attempt; 'fixed' does not.",
+      type: "'exponential' | 'fixed'",
+      default: "'exponential'",
+    },
+    maxDelayMs: {
+      description: 'Upper bound on the delay between attempts.',
+      type: 'number',
+      default: '30000',
+    },
+  }}
+/>
+
+## Choosing a conflict strategy
+
+<Accordions type="single">
+  <Accordion title="last-write-wins (default)">
+    The write with the newest timestamp wins, whichever side it came from. Simple
+    and predictable, but a stale offline client can overwrite fresher server data
+    when it reconnects. Good for drafts and user-scoped records.
+  </Accordion>
+  <Accordion title="server-wins">
+    Remote state always wins; conflicting local writes are discarded and reported
+    through `onError`. Use it when the server holds authoritative data — inventory
+    counts, balances, anything you cannot afford to clobber.
+  </Accordion>
+  <Accordion title="Custom resolver">
+    Supply a function and decide per record:
+
+    ```ts
+    conflict: (local, remote) => ({
+      ...remote,
+      tags: [...new Set([...local.tags, ...remote.tags])],
+    }),
+    ```
+
+    The resolver runs on the client, so keep it pure and fast — it may be called
+    once per conflicting record during a large reconnect.
+  </Accordion>
+</Accordions>
+
+## Environment variables
+
+The SDK reads nothing from the environment itself. These names are a convention
+used throughout these docs:
+
+```bash title=".env.local"
+NIMBUS_KEY=pk_live_...          # read-only, safe to expose
+NIMBUS_WRITE_KEY=sk_live_...    # server only, never bundle this
+```
+
+<Callout type="error" title="Never ship a write key to the browser">
+  Bundlers inline `NEXT_PUBLIC_*` and `VITE_*` values into client JavaScript. If a
+  write key ends up there, treat it as leaked and rotate it — see
+  [Authentication](/docs/guides/authentication).
+</Callout>

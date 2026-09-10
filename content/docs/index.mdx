@@ -1,0 +1,51 @@
+---
+title: Introduction
+description: Nimbus is a sample product used to demonstrate a Fumadocs documentation portal deployed as a static site.
+---
+
+**Nimbus** is a fictional edge data platform. These docs exist to demonstrate what a
+real documentation portal built with [Fumadocs](https://fumadocs.dev) looks like —
+navigation, search, callouts, tabbed code, API tables, and diagrams — exported as a
+fully static site and served from GitHub Pages.
+
+<Callout title="This is sample content">
+  Every API, endpoint, and version number on this site is invented. Replace
+  `content/docs` with your own MDX and the rest of the portal keeps working unchanged.
+</Callout>
+
+## What Nimbus does
+
+Nimbus keeps a local cache in sync with a remote dataset. You write to the local
+store, Nimbus reconciles with the server in the background, and your UI reads from
+one place regardless of connectivity.
+
+<Mermaid chart={`
+flowchart LR
+  A[Your App] -->|read / write| B[(Nimbus Cache)]
+  B -->|sync queue| C{Nimbus Edge}
+  C -->|replicate| D[(Primary Store)]
+  C -->|invalidate| B
+`} />
+
+## Where to go next
+
+<Cards>
+  <Card title="Quick Start" href="/docs/quick-start" description="Get a working client in under five minutes." />
+  <Card title="Installation" href="/docs/installation" description="Package manager, runtime, and framework support." />
+  <Card title="Configuration" href="/docs/configuration" description="Every option the client accepts." />
+  <Card title="API Reference" href="/docs/api-reference" description="Methods, types, and error codes." />
+</Cards>
+
+## How this site is built
+
+| Layer | Choice |
+| --- | --- |
+| Framework | Next.js 16 (App Router, `output: 'export'`) |
+| Docs engine | Fumadocs 16 with Fumadocs MDX |
+| Search | Orama, prebuilt index, executed in the browser |
+| Hosting | GitHub Pages via GitHub Actions |
+
+Because the whole site is static, there is no server to run and no runtime cost —
+but it also means anything requiring a request handler (server-side search, form
+posts, ISR) has to move to the client or go away. See [FAQ](/docs/faq) for the
+trade-offs.

@@ -1,0 +1,118 @@
+---
+title: Theming
+description: How this documentation portal is styled, and how to change it.
+---
+
+This page is about the docs site itself rather than the Nimbus SDK — it is the
+part you will actually reuse.
+
+Fumadocs ships its design as CSS custom properties on top of Tailwind CSS v4.
+Overriding a handful of variables restyles the whole portal.
+
+## Where styles live
+
+<Files>
+  <Folder name="app" defaultOpen>
+    <File name="global.css" />
+    <File name="layout.tsx" />
+  </Folder>
+  <Folder name="lib" defaultOpen>
+    <File name="layout.shared.tsx" />
+  </Folder>
+  <Folder name="components">
+    <File name="mdx.tsx" />
+    <File name="provider.tsx" />
+  </Folder>
+</Files>
+
+## Changing the palette
+
+Every colour is an `--color-fd-*` variable. Redefine the ones you care about in
+`app/global.css`:
+
+```css title="app/global.css"
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+:root {
+  --color-fd-primary: oklch(0.55 0.2 265);
+  --color-fd-background: oklch(0.99 0 0);
+}
+
+.dark {
+  --color-fd-primary: oklch(0.7 0.16 265);
+  --color-fd-background: oklch(0.16 0.01 265);
+}
+```
+
+<Callout>
+  Fumadocs ships preset palettes — `neutral`, `black`, `catppuccin`, `dusk`,
+  `ocean`, `purple`, `vitepress`. Swapping the `@import` line is often the whole
+  job.
+</Callout>
+
+## Choosing a layout
+
+The docs shell is a single component, so switching the overall shape is a one-line
+change in `app/docs/layout.tsx`:
+
+<Tabs items={['Docs', 'Notebook', 'Flux']}>
+  <Tab value="Docs">
+    ```tsx
+    import { DocsLayout } from 'fumadocs-ui/layouts/docs';
+    ```
+
+    The classic three-column layout used by this site: sidebar, content, table of
+    contents.
+  </Tab>
+  <Tab value="Notebook">
+    ```tsx
+    import { DocsLayout } from 'fumadocs-ui/layouts/notebook';
+    ```
+
+    Sidebar tucked under a full-width header. Suits products with several distinct
+    documentation sections.
+  </Tab>
+  <Tab value="Flux">
+    ```tsx
+    import { DocsLayout } from 'fumadocs-ui/layouts/flux';
+    ```
+
+    A more spacious, marketing-adjacent treatment.
+  </Tab>
+</Tabs>
+
+## Registering custom MDX components
+
+Anything you want to use in MDX without importing it must be registered once:
+
+```tsx title="components/mdx.tsx"
+import defaultMdxComponents from 'fumadocs-ui/mdx';
+import { Mermaid } from '@/components/mermaid';
+
+export function getMDXComponents(components?: MDXComponents) {
+  return {
+    ...defaultMdxComponents,
+    Mermaid,
+    ...components,
+  };
+}
+```
+
+That is exactly how the diagrams on
+[Data Fetching](/docs/guides/data-fetching) and
+[Authentication](/docs/guides/authentication) are rendered — `mermaid` is imported
+dynamically inside a client component, so it stays out of the static render and
+out of the initial bundle.
+
+## Dark mode
+
+Handled by `next-themes` through Fumadocs' `RootProvider`; the toggle is already in
+the navbar. To force a single theme:
+
+```tsx title="components/provider.tsx"
+<RootProvider theme={{ enabled: false, forcedTheme: 'dark' }}>
+  {children}
+</RootProvider>
+```

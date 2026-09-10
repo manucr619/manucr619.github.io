@@ -1,0 +1,84 @@
+---
+title: Changelog
+description: Release history for the Nimbus SDK.
+---
+
+<Callout title="Sample data">
+  These releases are fictional, included to show how a changelog page reads inside
+  this portal.
+</Callout>
+
+## 2.4.0 — 2026-08-27
+
+**Added**
+
+- Custom conflict resolvers. Pass a function to `conflict` to merge records field
+  by field. See [Configuration](/docs/configuration#choosing-a-conflict-strategy).
+- `nimbus.queue.list()` for inspecting pending offline writes.
+- `ap-south` edge region.
+
+**Changed**
+
+- Default retry backoff is now `exponential` (was `fixed`). Existing clients that
+  set `retry.backoff` explicitly are unaffected.
+
+**Fixed**
+
+- Queued deletes could replay before the create they depended on after a long
+  offline period.
+
+## 2.3.1 — 2026-07-14
+
+**Fixed**
+
+- `useCollection` re-subscribed on every render when the query builder was defined
+  inline, causing a socket reconnect loop.
+- IndexedDB persistence failed silently in Safari private browsing; it now falls
+  back to memory and warns once.
+
+## 2.3.0 — 2026-06-02
+
+**Added**
+
+- Cursor pagination via `.after(cursor)` and `page.nextCursor`.
+- `contains` operator for array fields.
+
+**Deprecated**
+
+- `.offset()` is deprecated and will be removed in 3.0. Offsets drift when records
+  change mid-pagination; use cursors instead.
+
+  ```diff
+  - const page = await notes.limit(50).offset(100).get();
+  + const page = await notes.limit(50).after(cursor).get();
+  ```
+
+## 2.2.0 — 2026-04-19
+
+**Added**
+
+- Session tokens (`nimbus.tokens.issue`) for per-user scoping without proxying
+  writes. See [Authentication](/docs/guides/authentication).
+
+**Security**
+
+- Publishable keys can no longer be used to write, even when a project was created
+  before scopes existed. Projects relying on that behaviour must move writes to a
+  secret key.
+
+## 2.1.0 — 2026-03-05
+
+**Added**
+
+- `@nimbus/react` package with `useCollection` and `useRecord`.
+- `npx @nimbus/cli doctor`.
+
+## 2.0.0 — 2026-01-22
+
+Initial public release of the v2 client.
+
+**Breaking**
+
+- `new NimbusClient()` is replaced by `createClient()`.
+- Endpoints moved from `/v1` to `/v2`; the response envelope is now
+  `{ items, nextCursor }` rather than a bare array.

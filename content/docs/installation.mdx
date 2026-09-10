@@ -1,0 +1,110 @@
+---
+title: Installation
+description: Supported runtimes, package managers, and framework integrations.
+---
+
+## Requirements
+
+| Requirement | Minimum | Notes |
+| --- | --- | --- |
+| Node.js | 20.11 | Required for the CLI and server SDK |
+| TypeScript | 5.4 | Optional, but types ship with the package |
+| Browsers | Last 2 versions | IndexedDB persistence needs a secure context |
+
+## Packages
+
+Nimbus is split so you only ship what you use.
+
+<Tabs items={['Core', 'React', 'Server', 'CLI']}>
+  <Tab value="Core">
+    ```bash
+    npm install @nimbus/client
+    ```
+
+    The framework-agnostic client. Everything else builds on it.
+  </Tab>
+  <Tab value="React">
+    ```bash
+    npm install @nimbus/client @nimbus/react
+    ```
+
+    Adds `<NimbusProvider>` plus the `useCollection` and `useRecord` hooks.
+  </Tab>
+  <Tab value="Server">
+    ```bash
+    npm install @nimbus/server
+    ```
+
+    Node-only. Uses a write key and skips the local cache entirely.
+  </Tab>
+  <Tab value="CLI">
+    ```bash
+    npm install -D @nimbus/cli
+    ```
+
+    Key management, schema migrations, and local emulator.
+  </Tab>
+</Tabs>
+
+## Framework setup
+
+<Tabs items={['Next.js', 'Vite', 'Node']}>
+  <Tab value="Next.js">
+    ```tsx title="app/providers.tsx"
+    'use client';
+
+    import { NimbusProvider } from '@nimbus/react';
+    import { nimbus } from '@/lib/nimbus';
+
+    export function Providers({ children }: { children: React.ReactNode }) {
+      return <NimbusProvider client={nimbus}>{children}</NimbusProvider>;
+    }
+    ```
+
+    <Callout>
+      The client touches IndexedDB, so mount the provider in a Client Component.
+      Server Components should use `@nimbus/server` instead.
+    </Callout>
+  </Tab>
+  <Tab value="Vite">
+    ```tsx title="src/main.tsx"
+    import { NimbusProvider } from '@nimbus/react';
+    import { nimbus } from './lib/nimbus';
+
+    createRoot(document.getElementById('root')!).render(
+      <NimbusProvider client={nimbus}>
+        <App />
+      </NimbusProvider>,
+    );
+    ```
+
+    Expose the key as `VITE_NIMBUS_KEY` — remember that anything prefixed with
+    `VITE_` is inlined into the client bundle, so it must be read-only.
+  </Tab>
+  <Tab value="Node">
+    ```ts title="server/nimbus.ts"
+    import { createServerClient } from '@nimbus/server';
+
+    export const nimbus = createServerClient({
+      projectKey: process.env.NIMBUS_WRITE_KEY!,
+      region: 'us-east',
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Verifying the install
+
+```bash title="Terminal"
+npx @nimbus/cli doctor
+```
+
+```text title="Expected output"
+✔ @nimbus/client   2.4.0
+✔ Project key      local-dev (read, write)
+✔ Region           us-east (34ms)
+✔ Persistence      indexeddb available
+```
+
+If `doctor` reports a region timeout, see
+[FAQ → connectivity](/docs/faq).

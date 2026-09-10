@@ -1,0 +1,84 @@
+---
+title: FAQ
+description: Common questions about Nimbus and about running this portal as a static site.
+---
+
+## About this portal
+
+<Accordions type="single">
+  <Accordion title="How does search work without a server?">
+    At build time Fumadocs writes an [Orama](https://docs.orama.com) index to
+    `/api/search`, which the static export emits as a plain JSON file. The browser
+    downloads it on first use and runs every query locally — so search works on
+    GitHub Pages with no backend at all.
+
+    The trade-off is index size: the whole thing is downloaded up front. For a few
+    dozen pages that is a few tens of kilobytes. For thousands of pages, move to a
+    hosted index such as Orama Cloud or Algolia.
+  </Accordion>
+  <Accordion title="Why is `trailingSlash` enabled?">
+    Without it, Next.js emits `out/docs.html`, and GitHub Pages resolves a request
+    for `/docs` against the `docs/` directory that also exists — which has no
+    `index.html`. Setting `trailingSlash: true` emits `out/docs/index.html`
+    instead, which resolves unambiguously.
+  </Accordion>
+  <Accordion title="What is the `.nojekyll` file for?">
+    GitHub Pages runs Jekyll over the published directory by default, and Jekyll
+    ignores paths beginning with an underscore. That would delete `_next/` —
+    every script and stylesheet on the site. An empty `.nojekyll` at the root
+    turns Jekyll off.
+  </Accordion>
+  <Accordion title="Do I need a basePath?">
+    Only for a project site. This portal is published to the user site repository
+    `manucr619.github.io`, which serves from the domain root, so no `basePath` or
+    `assetPrefix` is needed. Deploying to `user.github.io/my-repo` instead requires
+    both, set to `/my-repo`.
+  </Accordion>
+  <Accordion title="What stops working under static export?">
+    Anything that needs a request at run time: route handlers that read the
+    request, `headers()` and `cookies()`, middleware, ISR, image optimisation, and
+    server actions. Fumadocs' own server pieces — search, OG images, the `llms.txt`
+    endpoints — are all pre-rendered at build time in this template, which is why
+    it exports cleanly.
+  </Accordion>
+</Accordions>
+
+## About Nimbus
+
+<Accordions type="single">
+  <Accordion title="Connectivity: `doctor` reports a region timeout">
+    Nimbus uses WebSockets over port 443. Corporate proxies that terminate TLS
+    frequently break the upgrade handshake. Confirm with:
+
+    ```bash
+    npx @nimbus/cli doctor --transport polling
+    ```
+
+    If polling succeeds where the default fails, the proxy is the cause. Set
+    `transport: 'polling'` as a stopgap and allowlist `*.nimbus.dev` properly.
+  </Accordion>
+  <Accordion title="Can I use Nimbus in a Server Component?">
+    Not the browser client — it expects IndexedDB and a persistent socket. Use
+    `@nimbus/server`, which is request-scoped and skips the cache entirely.
+  </Accordion>
+  <Accordion title="Is there a hard record size limit?">
+    1 MB per record and 10,000 records per collection on the sample tier. Store
+    large blobs elsewhere and keep a URL in the record.
+  </Accordion>
+  <Accordion title="How do I reset local state during development?">
+    ```ts
+    await nimbus.queue.clear();
+    await nimbus.close();
+    indexedDB.deleteDatabase('nimbus');
+    ```
+
+    Then reload. Anything not yet replicated is lost, which is usually the point.
+  </Accordion>
+</Accordions>
+
+## Still stuck?
+
+<Cards>
+  <Card title="API Reference" href="/docs/api-reference" description="Every method, type, and error code." />
+  <Card title="Fumadocs docs" href="https://fumadocs.dev" description="The framework this portal is built on." />
+</Cards>

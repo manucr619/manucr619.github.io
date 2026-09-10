@@ -1,0 +1,139 @@
+---
+title: Quick Start
+description: Create a Nimbus client, write a record, and read it back — in about five minutes.
+---
+
+This walkthrough gets you from an empty project to a synced record. It assumes
+Node.js 20 or newer.
+
+<Steps>
+
+<Step>
+
+### Install the SDK
+
+<Tabs items={['npm', 'pnpm', 'yarn', 'bun']}>
+  <Tab value="npm">
+    ```bash
+    npm install @nimbus/client
+    ```
+  </Tab>
+  <Tab value="pnpm">
+    ```bash
+    pnpm add @nimbus/client
+    ```
+  </Tab>
+  <Tab value="yarn">
+    ```bash
+    yarn add @nimbus/client
+    ```
+  </Tab>
+  <Tab value="bun">
+    ```bash
+    bun add @nimbus/client
+    ```
+  </Tab>
+</Tabs>
+
+</Step>
+
+<Step>
+
+### Create a project key
+
+Every client authenticates with a project key. Generate one from the dashboard, or
+from the CLI:
+
+```bash title="Terminal"
+npx @nimbus/cli keys create --name "local-dev" --scope read,write
+```
+
+<Callout type="warn" title="Keep write keys server-side">
+  A key with the `write` scope can mutate any collection in the project. Browser
+  clients should use a read-only key and route writes through your own backend.
+</Callout>
+
+</Step>
+
+<Step>
+
+### Initialise the client
+
+```ts title="lib/nimbus.ts"
+import { createClient } from '@nimbus/client';
+
+export const nimbus = createClient({
+  projectKey: process.env.NIMBUS_KEY!,
+  region: 'us-east',
+  // Records stay in memory until the first successful sync.
+  persistence: 'indexeddb',
+});
+```
+
+</Step>
+
+<Step>
+
+### Write and read a record
+
+```ts title="app/example.ts"
+import { nimbus } from '@/lib/nimbus';
+
+const notes = nimbus.collection('notes');
+
+// Writes land locally first, then replicate in the background.
+const created = await notes.put({
+  id: 'note_1',
+  title: 'Hello Nimbus',
+  body: 'Written offline, synced when the connection returns.',
+});
+
+console.log(created.syncState); // 'pending' -> 'synced'
+
+const found = await notes.get('note_1');
+console.log(found?.title); // 'Hello Nimbus'
+```
+
+</Step>
+
+<Step>
+
+### Watch for changes
+
+`subscribe` fires on both local writes and remote invalidations, so a single
+listener keeps your UI honest.
+
+```ts title="app/example.ts"
+const unsubscribe = notes.subscribe((event) => {
+  if (event.type === 'changed') {
+    console.log('updated from', event.origin); // 'local' | 'remote'
+  }
+});
+
+// Call when the component unmounts.
+unsubscribe();
+```
+
+</Step>
+
+</Steps>
+
+## What you built
+
+<Files>
+  <Folder name="app" defaultOpen>
+    <File name="example.ts" />
+  </Folder>
+  <Folder name="lib" defaultOpen>
+    <File name="nimbus.ts" />
+  </Folder>
+  <File name=".env.local" />
+  <File name="package.json" />
+</Files>
+
+## Next steps
+
+<Cards>
+  <Card title="Configuration" href="/docs/configuration" description="Tune persistence, retries, and conflict resolution." />
+  <Card title="Authentication" href="/docs/guides/authentication" description="Scoped keys, token exchange, and rotation." />
+</Cards>
